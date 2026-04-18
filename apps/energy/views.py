@@ -126,7 +126,6 @@ Wypelnij powyzszy JSON danymi po polsku. Zwroc TYLKO JSON."""
             generation_config=GenerationConfig(
                 max_output_tokens=2048,
                 temperature=0.1,
-                thinking_config={"thinking_budget": 0},
             ),
         )
 
