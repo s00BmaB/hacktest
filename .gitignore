@@ -1,0 +1,30 @@
+# Node.js / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python (venv)
+venv/
+.venv/
+env/
+.env/
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
+*.pyc
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
