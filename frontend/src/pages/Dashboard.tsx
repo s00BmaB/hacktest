@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import api from '../api/client';
+import { motion } from 'framer-motion';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/api/client';
+import Navbar from '@/components/Navbar';
+import { BoltIcon, UploadIcon, ChartIcon, BarChartIcon, SparklesIcon, LightbulbIcon, TrendingUpIcon, ClockIcon, DatabaseIcon, CheckIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface Reading { date: string; kwh: number; cost: number | null; }
 interface Analysis {
@@ -14,6 +20,7 @@ interface Analysis {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [readings, setReadings] = useState<Reading[]>([]);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -22,7 +29,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadReadings(); }, []);
+  useEffect(() => { if (user) loadReadings(); }, [user]);
 
   const loadReadings = async () => {
     try {
@@ -41,8 +48,9 @@ export default function Dashboard() {
       const { data } = await api.post('/energy/upload/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       setUploadMsg(data.message);
       await loadReadings();
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Błąd uploadu.');
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Błąd uploadu.');
     } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
   };
 
@@ -51,162 +59,276 @@ export default function Dashboard() {
     try {
       const { data } = await api.post('/energy/analyze/');
       setAnalysis(data);
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Błąd analizy AI.');
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Błąd analizy AI.');
     } finally { setAnalyzing(false); }
   };
 
-  const assessmentColor = (a: string) => ({ niskie: '#22c55e', typowe: '#f59e0b', wysokie: '#ef4444' }[a] ?? '#94a3b8');
+  const assessmentColor = (a: string) =>
+    ({ niskie: 'text-chart-3', typowe: 'text-primary', wysokie: 'text-destructive' }[a] ?? 'text-muted-foreground');
+
   const totalKwh = readings.reduce((s, r) => s + r.kwh, 0);
   const avgKwh = readings.length ? totalKwh / readings.length : 0;
 
+  const stats = [
+    { label: 'Odczyty', value: readings.length, icon: DatabaseIcon, color: 'text-primary' },
+    { label: 'Łącznie kWh', value: totalKwh.toFixed(1), icon: BoltIcon, color: 'text-accent' },
+    { label: 'Średnia/dzień', value: `${avgKwh.toFixed(2)} kWh`, icon: TrendingUpIcon, color: 'text-chart-3' },
+    { label: 'Ostatni odczyt', value: readings[readings.length - 1]?.date || '-', icon: ClockIcon, color: 'text-chart-4' },
+  ];
+
   return (
-    <div style={s.page}>
-      <div style={s.header}>
-        <h1 style={s.title}>⚡ Dashboard energetyczny</h1>
-        <p style={s.sub}>Monitoruj i optymalizuj swoje zużycie energii</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* Stats strip */}
-      {readings.length > 0 && (
-        <div style={s.statsRow}>
-          {[
-            { label: 'Odczyty', value: readings.length },
-            { label: 'Łącznie kWh', value: totalKwh.toFixed(1) },
-            { label: 'Średnia/dzień', value: `${avgKwh.toFixed(2)} kWh` },
-            { label: 'Ostatni odczyt', value: readings[readings.length - 1]?.date },
-          ].map(st => (
-            <div key={st.label} style={s.statCard}>
-              <div style={s.statVal}>{st.value}</div>
-              <div style={s.statLabel}>{st.label}</div>
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <BoltIcon size={24} className="text-primary" />
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Upload */}
-      <div style={s.card}>
-        <h2 style={s.cardTitle}>📂 Wgraj dane CSV</h2>
-        <p style={s.cardSub}>Format: <code style={s.code}>date,kwh,cost</code> — np. <code style={s.code}>2024-01-15,8.5,6.80</code></p>
-        <div style={s.uploadRow}>
-          <input ref={fileRef} type="file" accept=".csv" style={s.fileInput} />
-          <button onClick={handleUpload} disabled={uploading} style={s.btnPrimary}>
-            {uploading ? 'Wgrywanie...' : 'Wgraj plik'}
-          </button>
-        </div>
-        {uploadMsg && <div style={s.success}>{uploadMsg}</div>}
-        {error && <div style={s.errBox}>{error}</div>}
-      </div>
-
-      {/* Charts */}
-      {readings.length > 0 && (
-        <div style={s.chartsRow}>
-          <div style={{ ...s.card, flex: 2 }}>
-            <h2 style={s.cardTitle}>📈 Zużycie dzienne (kWh)</h2>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={readings}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={d => d.slice(5)} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} labelStyle={{ color: '#f1f5f9' }} itemStyle={{ color: '#f59e0b' }} />
-                <Line type="monotone" dataKey="kwh" stroke="#f59e0b" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard energetyczny</h1>
           </div>
-          <div style={{ ...s.card, flex: 1 }}>
-            <h2 style={s.cardTitle}>📊 Ostatnie 14 dni</h2>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={readings.slice(-14)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} itemStyle={{ color: '#38bdf8' }} />
-                <Bar dataKey="kwh" fill="#38bdf8" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+          <p className="text-muted-foreground">Monitoruj i optymalizuj swoje zużycie energii</p>
+        </motion.div>
 
-      {/* AI Analysis */}
-      {readings.length >= 3 && (
-        <div style={s.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={s.cardTitle}>🤖 Analiza AI (Claude)</h2>
-            <button onClick={handleAnalyze} disabled={analyzing} style={s.btnAI}>
-              {analyzing ? '⏳ Analizuję...' : '✨ Analizuj dane'}
-            </button>
-          </div>
+        {/* Stats */}
+        {readings.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          >
+            {stats.map((stat, index) => (
+              <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + index * 0.05 }}>
+                <Card className="glass glass-border card-hover">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className={`text-2xl sm:text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
+                      </div>
+                      <div className={`p-2 rounded-lg bg-secondary ${stat.color}`}>
+                        <stat.icon size={20} />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
 
-          {analysis && (
-            <div style={s.analysisBox}>
-              <div style={s.summaryText}>{analysis.summary}</div>
-
-              <div style={s.infoRow}>
-                <div style={s.infoPill}>
-                  <span style={{ color: '#64748b' }}>Prognoza miesiąc:</span>
-                  <strong style={{ color: '#f59e0b' }}> {analysis.predicted_kwh} kWh ≈ {analysis.predicted_cost_pln} PLN</strong>
-                </div>
-                <div style={s.infoPill}>
-                  <span style={{ color: '#64748b' }}>Sugerowana taryfa:</span>
-                  <strong style={{ color: '#38bdf8' }}> {analysis.tariff_suggestion}</strong>
-                </div>
-                <div style={s.infoPill}>
-                  <span style={{ color: '#64748b' }}>Zużycie:</span>
-                  <strong style={{ color: assessmentColor(analysis.consumption_assessment) }}> {analysis.consumption_assessment}</strong>
-                </div>
+        {/* Upload */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mb-8">
+          <Card className="glass glass-border">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <UploadIcon size={20} className="text-primary" />
+                <CardTitle>Wgraj dane CSV</CardTitle>
               </div>
+              <CardDescription>
+                Format: <code className="px-1.5 py-0.5 rounded bg-secondary text-accent text-xs">date,kwh,cost</code> — np.{' '}
+                <code className="px-1.5 py-0.5 rounded bg-secondary text-accent text-xs">2024-01-15,8.5,6.80</code>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv"
+                  className="flex-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 text-sm text-muted-foreground bg-input border border-border rounded-lg px-4 py-2"
+                />
+                <Button onClick={handleUpload} disabled={uploading} className="gap-2">
+                  {uploading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                      Wgrywanie...
+                    </>
+                  ) : (
+                    <>
+                      <UploadIcon size={18} />
+                      Wgraj plik
+                    </>
+                  )}
+                </Button>
+              </div>
+              {uploadMsg && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-lg bg-chart-3/10 border border-chart-3/20 flex items-center gap-2"
+                >
+                  <CheckIcon size={18} className="text-chart-3" />
+                  <p className="text-sm text-chart-3">{uploadMsg}</p>
+                </motion.div>
+              )}
+              {error && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20"
+                >
+                  <p className="text-sm text-destructive">{error}</p>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-              <div style={s.tariffNote}>{analysis.tariff_reason}</div>
+        {/* Charts */}
+        {readings.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="grid lg:grid-cols-3 gap-6 mb-8"
+          >
+            <Card className="glass glass-border lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ChartIcon size={20} className="text-primary" />
+                  <CardTitle>Zużycie dzienne (kWh)</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={readings}>
+                      <defs>
+                        <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="oklch(0.75 0.18 55)" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="oklch(0.75 0.18 55)" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.02 260)" />
+                      <XAxis dataKey="date" tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 11 }} tickFormatter={d => d.slice(5)} axisLine={{ stroke: 'oklch(0.22 0.02 260)' }} />
+                      <YAxis tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 11 }} axisLine={{ stroke: 'oklch(0.22 0.02 260)' }} />
+                      <Tooltip
+                        contentStyle={{ background: 'oklch(0.13 0.01 260)', border: '1px solid oklch(0.22 0.02 260)', borderRadius: '8px' }}
+                        labelStyle={{ color: 'oklch(0.95 0.01 260)' }}
+                        itemStyle={{ color: 'oklch(0.75 0.18 55)' }}
+                      />
+                      <Area type="monotone" dataKey="kwh" stroke="oklch(0.75 0.18 55)" strokeWidth={2} fillOpacity={1} fill="url(#colorKwh)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
 
-              <h3 style={s.recoTitle}>💡 Rekomendacje</h3>
-              <ul style={s.recoList}>
-                {analysis.recommendations.map((r, i) => (
-                  <li key={i} style={s.recoItem}>{r}</li>
-                ))}
-              </ul>
+            <Card className="glass glass-border">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <BarChartIcon size={20} className="text-accent" />
+                  <CardTitle>Ostatnie 14 dni</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={readings.slice(-14)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.02 260)" />
+                      <XAxis dataKey="date" tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 10 }} tickFormatter={d => d.slice(8)} axisLine={{ stroke: 'oklch(0.22 0.02 260)' }} />
+                      <YAxis tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 11 }} axisLine={{ stroke: 'oklch(0.22 0.02 260)' }} />
+                      <Tooltip
+                        contentStyle={{ background: 'oklch(0.13 0.01 260)', border: '1px solid oklch(0.22 0.02 260)', borderRadius: '8px' }}
+                        itemStyle={{ color: 'oklch(0.65 0.2 200)' }}
+                      />
+                      <Bar dataKey="kwh" fill="oklch(0.65 0.2 200)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* AI Analysis */}
+        {readings.length >= 3 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+            <Card className="glass glass-border">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <SparklesIcon size={20} className="text-chart-4" />
+                    <CardTitle>Analiza AI (Claude)</CardTitle>
+                  </div>
+                  <Button
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                    variant="outline"
+                    className="gap-2 border-chart-4/50 text-chart-4 hover:bg-chart-4/10"
+                  >
+                    {analyzing ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-chart-4 border-t-transparent rounded-full animate-spin" />
+                        Analizuję...
+                      </>
+                    ) : (
+                      <>
+                        <SparklesIcon size={18} />
+                        Analizuj dane
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+
+              {analysis && (
+                <CardContent className="space-y-6">
+                  <p className="text-foreground/90 leading-relaxed">{analysis.summary}</p>
+
+                  <div className="flex flex-wrap gap-3">
+                    <div className="px-4 py-2.5 rounded-lg bg-secondary border border-border">
+                      <span className="text-sm text-muted-foreground">Prognoza miesiąc: </span>
+                      <span className="text-sm font-semibold text-primary">
+                        {analysis.predicted_kwh} kWh ≈ {analysis.predicted_cost_pln} PLN
+                      </span>
+                    </div>
+                    <div className="px-4 py-2.5 rounded-lg bg-secondary border border-border">
+                      <span className="text-sm text-muted-foreground">Sugerowana taryfa: </span>
+                      <span className="text-sm font-semibold text-accent">{analysis.tariff_suggestion}</span>
+                    </div>
+                    <div className="px-4 py-2.5 rounded-lg bg-secondary border border-border">
+                      <span className="text-sm text-muted-foreground">Zużycie: </span>
+                      <span className={`text-sm font-semibold ${assessmentColor(analysis.consumption_assessment)}`}>
+                        {analysis.consumption_assessment}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-muted-foreground italic">{analysis.tariff_reason}</p>
+
+                  <div>
+                    <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground mb-4">
+                      <LightbulbIcon size={20} className="text-primary" />
+                      Rekomendacje
+                    </h3>
+                    <ul className="space-y-3">
+                      {analysis.recommendations.map((r, i) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                          <span className="text-foreground/80 leading-relaxed">{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Empty State */}
+        {readings.length === 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="text-center py-16"
+          >
+            <div className="inline-flex p-4 rounded-2xl bg-secondary/50 mb-6">
+              <ChartIcon size={48} className="text-muted-foreground" />
             </div>
-          )}
-        </div>
-      )}
-
-      {readings.length === 0 && (
-        <div style={s.emptyState}>
-          <div style={{ fontSize: 48 }}>📊</div>
-          <p>Wgraj plik CSV z danymi zużycia energii, żeby zobaczyć wykresy i analizę AI.</p>
-        </div>
-      )}
+            <h3 className="text-xl font-semibold text-foreground mb-2">Brak danych</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Wgraj plik CSV z danymi zużycia energii, żeby zobaczyć wykresy i analizę AI.
+            </p>
+          </motion.div>
+        )}
+      </main>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 1100, margin: '0 auto', padding: '32px 24px' },
-  header: { marginBottom: 28 },
-  title: { color: '#f1f5f9', fontSize: 28, fontWeight: 700, margin: 0 },
-  sub: { color: '#64748b', marginTop: 6 },
-  statsRow: { display: 'flex', gap: 16, marginBottom: 24 },
-  statCard: { flex: 1, background: '#1e293b', borderRadius: 12, padding: '20px 24px', border: '1px solid #334155' },
-  statVal: { color: '#f59e0b', fontSize: 28, fontWeight: 700 },
-  statLabel: { color: '#64748b', fontSize: 13, marginTop: 4 },
-  card: { background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155' },
-  cardTitle: { color: '#f1f5f9', fontSize: 18, fontWeight: 600, margin: '0 0 8px 0' },
-  cardSub: { color: '#64748b', fontSize: 13, marginBottom: 16 },
-  code: { background: '#0f172a', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace', color: '#38bdf8' },
-  uploadRow: { display: 'flex', gap: 12, alignItems: 'center' },
-  fileInput: { background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '8px 12px', color: '#94a3b8', flex: 1 },
-  btnPrimary: { background: '#f59e0b', color: '#0f172a', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 700, cursor: 'pointer' },
-  btnAI: { background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 600, cursor: 'pointer' },
-  success: { marginTop: 12, color: '#4ade80', background: '#052e16', padding: '10px 14px', borderRadius: 8, fontSize: 14 },
-  errBox: { marginTop: 12, color: '#fca5a5', background: '#450a0a', padding: '10px 14px', borderRadius: 8, fontSize: 14 },
-  chartsRow: { display: 'flex', gap: 20, marginBottom: 20 },
-  analysisBox: { marginTop: 16 },
-  summaryText: { color: '#cbd5e1', lineHeight: 1.7, marginBottom: 16 },
-  infoRow: { display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 },
-  infoPill: { background: '#0f172a', borderRadius: 8, padding: '8px 14px', border: '1px solid #334155', fontSize: 14 },
-  tariffNote: { color: '#94a3b8', fontSize: 13, fontStyle: 'italic', marginBottom: 16 },
-  recoTitle: { color: '#f1f5f9', fontSize: 16, fontWeight: 600, marginBottom: 10 },
-  recoList: { paddingLeft: 20 },
-  recoItem: { color: '#cbd5e1', marginBottom: 8, lineHeight: 1.6 },
-  emptyState: { textAlign: 'center', color: '#475569', padding: '60px 0' },
-};

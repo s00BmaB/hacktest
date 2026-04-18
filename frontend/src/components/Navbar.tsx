@@ -1,41 +1,148 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import { BoltIcon, ChatIcon, DashboardIcon, ShieldIcon, UserIcon, LogoutIcon, MenuIcon, XIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => { logout(); navigate('/login'); };
+  const isActive = (path: string) => pathname === path;
+
+  const navLinks = user ? [
+    { href: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+    { href: '/chat', label: 'Sznelk', icon: ChatIcon },
+    { href: '/privacy', label: 'GDPR', icon: ShieldIcon },
+  ] : [];
 
   return (
-    <nav style={s.nav}>
-      <Link to="/" style={s.brand}>⚡ Silesia Akkka</Link>
-      <div style={s.links}>
-        {user ? (
-          <>
-            <Link to="/dashboard" style={s.link}>Dashboard</Link>
-            <Link to="/chat" style={s.link}>🗣️ Sznelk</Link>
-            <Link to="/privacy" style={s.link}>🔒 RODO</Link>
-            <span style={s.username}>👤 {user.username}</span>
-            <button onClick={handleLogout} style={s.btn}>Wyloguj</button>
-          </>
-        ) : (
-          <>
-            <Link to="/login" style={s.link}>Logowanie</Link>
-            <Link to="/register" style={s.btnPrimary}>Rejestracja</Link>
-          </>
-        )}
+    <nav className="sticky top-0 z-50 glass glass-border">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/20 rounded-lg blur-lg group-hover:bg-primary/30 transition-colors" />
+              <div className="relative bg-gradient-to-br from-primary to-primary/80 p-2 rounded-lg">
+                <BoltIcon size={20} className="text-primary-foreground" />
+              </div>
+            </div>
+            <span className="font-bold text-lg text-foreground tracking-tight">
+              Silesia <span className="text-primary">Akkka</span>
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-1">
+            {navLinks.map(({ href, label, icon: Icon }) => (
+              <Link key={href} to={href}>
+                <Button
+                  variant={isActive(href) ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className={`gap-2 ${isActive(href) ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  <Icon size={16} />
+                  {label}
+                </Button>
+              </Link>
+            ))}
+          </div>
+
+          {/* User Section */}
+          <div className="hidden md:flex items-center gap-3">
+            {user ? (
+              <>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/50">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                    <UserIcon size={14} className="text-muted-foreground" />
+                  </div>
+                  <span className="text-sm text-muted-foreground">{user.username}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-foreground gap-2"
+                >
+                  <LogoutIcon size={16} />
+                  Wyloguj
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                    Logowanie
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    Rejestracja
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <XIcon size={24} /> : <MenuIcon size={24} />}
+          </button>
+        </div>
       </div>
+
+      {/* Mobile Navigation */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="md:hidden glass-border border-t"
+          >
+            <div className="px-4 py-4 space-y-2">
+              {navLinks.map(({ href, label, icon: Icon }) => (
+                <Link key={href} to={href} onClick={() => setMobileMenuOpen(false)}>
+                  <Button
+                    variant={isActive(href) ? 'secondary' : 'ghost'}
+                    className="w-full justify-start gap-3"
+                  >
+                    <Icon size={18} />
+                    {label}
+                  </Button>
+                </Link>
+              ))}
+              {user ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                  className="w-full justify-start gap-3 text-muted-foreground"
+                >
+                  <LogoutIcon size={18} />
+                  Wyloguj ({user.username})
+                </Button>
+              ) : (
+                <div className="flex gap-2 pt-2">
+                  <Link to="/login" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full">Logowanie</Button>
+                  </Link>
+                  <Link to="/register" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
+                    <Button className="w-full">Rejestracja</Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  nav: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 32px', background: '#0f172a', borderBottom: '1px solid #1e293b', position: 'sticky', top: 0, zIndex: 100 },
-  brand: { color: '#f59e0b', fontWeight: 700, fontSize: 20, textDecoration: 'none', letterSpacing: -0.5 },
-  links: { display: 'flex', alignItems: 'center', gap: 16 },
-  link: { color: '#94a3b8', textDecoration: 'none', fontSize: 14 },
-  username: { color: '#64748b', fontSize: 13 },
-  btn: { background: 'none', border: '1px solid #334155', color: '#94a3b8', padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
-  btnPrimary: { background: '#f59e0b', color: '#0f172a', padding: '6px 14px', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 600 },
-};

@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '../api/client';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/api/client';
+import Navbar from '@/components/Navbar';
+import { BoltIcon, ChatIcon, SendIcon, TrashIcon, AlertIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Msg { role: 'user' | 'assistant'; content: string; timestamp: string; }
 
 export default function Chat() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -11,8 +18,8 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.get('/chat/history/').then(r => setMessages(r.data)).catch(() => {});
-  }, []);
+    if (user) api.get('/chat/history/').then(r => setMessages(r.data)).catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,10 +34,9 @@ export default function Chat() {
     setLoading(true);
     try {
       const { data } = await api.post('/chat/send/', { message: text });
-      const botMsg: Msg = { role: 'assistant', content: data.reply, timestamp: new Date().toISOString() };
-      setMessages(m => [...m, botMsg]);
-    } catch (e: any) {
-      setMessages(m => [...m, { role: 'assistant', content: '⚠️ Błōnd połōnczynio. Sprōbuj jeszcze roz.', timestamp: new Date().toISOString() }]);
+      setMessages(m => [...m, { role: 'assistant', content: data.reply, timestamp: new Date().toISOString() }]);
+    } catch {
+      setMessages(m => [...m, { role: 'assistant', content: 'Błōnd połōnczynio. Sprōbuj jeszcze roz.', timestamp: new Date().toISOString() }]);
     } finally { setLoading(false); }
   };
 
@@ -46,95 +52,156 @@ export default function Chat() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
+  const suggestions = [
+    'Jako taryfa je nojlypszo dla mie?',
+    'Jak mogã oszczyndować prōnd?',
+    'Co to je taryfa G12?',
+    'Mōj rachunyk je za wysoki',
+  ];
+
   return (
-    <div style={s.page}>
-      <div style={s.header}>
-        <div>
-          <h1 style={s.title}>🗣️ Sznelk — Ślōnski Asystent Tauron</h1>
-          <p style={s.sub}>Godej ze mnom po śląsku — pyto mie o prōnd, rachunki i jak oszczyndować!</p>
-        </div>
-        <button onClick={clearHistory} disabled={clearing} style={s.clearBtn}>
-          {clearing ? 'Kasuje...' : '🗑️ Wyczyść'}
-        </button>
-      </div>
+    <div className="min-h-screen bg-background flex flex-col">
+      <Navbar />
+      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
 
-      <div style={s.chatWindow}>
-        {messages.length === 0 && (
-          <div style={s.welcome}>
-            <div style={{ fontSize: 56 }}>⚡</div>
-            <p style={{ color: '#f59e0b', fontWeight: 600, fontSize: 18 }}>Serwus! Jo je Sznelk!</p>
-            <p style={{ color: '#94a3b8', fontSize: 14 }}>Twōj ślōnski asystent energetyczny od Tauron.<br />Pyto mie o rachunki, taryfy i jak oszczyndować prōnd!</p>
-            <div style={s.suggestions}>
-              {['Jako taryfa je nojlypszo dla mie?', 'Jak mogã oszczyndować prōnd?', 'Co to je taryfa G12?', 'Mōj rachunyk je za wysoki'].map(q => (
-                <button key={q} onClick={() => { setInput(q); }} style={s.suggBtn}>{q}</button>
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-start justify-between gap-4 mb-6"
+        >
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <ChatIcon size={24} className="text-primary" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+                Sznelk <span className="text-primary">—</span> Ślōnski Asystent
+              </h1>
+            </div>
+            <p className="text-muted-foreground">
+              Godej ze mnom po śląsku — pyto mie o prōnd, rachunki i jak oszczyndować!
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearHistory}
+            disabled={clearing || messages.length === 0}
+            className="gap-2 text-muted-foreground"
+          >
+            <TrashIcon size={16} />
+            <span className="hidden sm:inline">{clearing ? 'Kasuje...' : 'Wyczyść'}</span>
+          </Button>
+        </motion.div>
+
+        {/* Chat Window */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="flex-1 glass glass-border rounded-xl overflow-hidden flex flex-col"
+        >
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {/* Welcome */}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center text-center py-12">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-xl" />
+                  <div className="relative bg-gradient-to-br from-primary to-primary/80 p-4 rounded-2xl">
+                    <BoltIcon size={40} className="text-primary-foreground" />
+                  </div>
+                </div>
+                <h2 className="text-xl font-semibold text-primary mb-2">Serwus! Jo je Sznelk!</h2>
+                <p className="text-muted-foreground max-w-md mb-8">
+                  Twōj ślōnski asystent energetyczny od Tauron.<br />
+                  Pyto mie o rachunki, taryfy i jak oszczyndować prōnd!
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {suggestions.map(q => (
+                    <Button key={q} variant="outline" size="sm" onClick={() => setInput(q)} className="text-sm">
+                      {q}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Messages */}
+            <AnimatePresence>
+              {messages.map((msg, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+                      <BoltIcon size={16} className="text-primary-foreground" />
+                    </div>
+                  )}
+                  <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-md'
+                      : 'bg-secondary border border-border rounded-bl-md'
+                  }`}>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.content.includes('Błōnd') && (
+                        <AlertIcon size={14} className="inline mr-1.5 text-destructive" />
+                      )}
+                      {msg.content}
+                    </p>
+                    <p className={`text-xs mt-2 ${msg.role === 'user' ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </motion.div>
               ))}
+            </AnimatePresence>
+
+            {/* Typing indicator */}
+            {loading && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 justify-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+                  <BoltIcon size={16} className="text-primary-foreground" />
+                </div>
+                <div className="bg-secondary border border-border rounded-2xl rounded-bl-md px-4 py-3">
+                  <div className="flex gap-1 items-center h-5">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-border p-4 sm:p-6">
+            <div className="flex gap-3 items-end">
+              <Textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKey}
+                placeholder="Napisz wiadomość... (Enter = wyślij, Shift+Enter = nowa linia)"
+                rows={2}
+                disabled={loading}
+                className="flex-1 resize-none bg-input border-border min-h-[52px]"
+              />
+              <Button
+                onClick={send}
+                disabled={loading || !input.trim()}
+                size="lg"
+                className="h-[52px] w-[52px] p-0"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <SendIcon size={20} />
+                )}
+              </Button>
             </div>
           </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div key={i} style={{ ...s.msgRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-            {msg.role === 'assistant' && <div style={s.avatar}>⚡</div>}
-            <div style={msg.role === 'user' ? s.userBubble : s.botBubble}>
-              <div style={s.bubbleText}>{msg.content}</div>
-              <div style={s.timestamp}>{new Date(msg.timestamp).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
-          </div>
-        ))}
-
-        {loading && (
-          <div style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
-            <div style={s.avatar}>⚡</div>
-            <div style={s.botBubble}><div style={s.typing}><span/><span/><span/></div></div>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
-      </div>
-
-      <div style={s.inputRow}>
-        <textarea
-          style={s.textarea}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="Napisz wiadomość... (Enter = wyślij, Shift+Enter = nowa linia)"
-          rows={2}
-          disabled={loading}
-        />
-        <button onClick={send} disabled={loading || !input.trim()} style={s.sendBtn}>
-          {loading ? '⏳' : '➤'}
-        </button>
-      </div>
-
-      <style>{`
-        @keyframes bounce { 0%,80%,100%{transform:scale(0)} 40%{transform:scale(1)} }
-        div[data-typing] span { display:inline-block; width:6px; height:6px; background:#64748b; border-radius:50%; margin:0 2px; animation:bounce 1.4s infinite ease-in-out; }
-        div[data-typing] span:nth-child(2){animation-delay:.16s}
-        div[data-typing] span:nth-child(3){animation-delay:.32s}
-      `}</style>
+        </motion.div>
+      </main>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 800, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 70px)' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  title: { color: '#f1f5f9', fontSize: 22, fontWeight: 700, margin: 0 },
-  sub: { color: '#64748b', fontSize: 13, marginTop: 4 },
-  clearBtn: { background: 'none', border: '1px solid #334155', color: '#64748b', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
-  chatWindow: { flex: 1, overflowY: 'auto', background: '#0f172a', borderRadius: 12, border: '1px solid #1e293b', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 },
-  welcome: { textAlign: 'center', padding: '40px 20px', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 },
-  suggestions: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 12 },
-  suggBtn: { background: '#1e293b', border: '1px solid #334155', color: '#94a3b8', padding: '8px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 13 },
-  msgRow: { display: 'flex', gap: 10, alignItems: 'flex-end' },
-  avatar: { width: 32, height: 32, background: '#f59e0b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 },
-  userBubble: { background: '#1d4ed8', borderRadius: '18px 18px 4px 18px', padding: '10px 16px', maxWidth: '75%' },
-  botBubble: { background: '#1e293b', borderRadius: '18px 18px 18px 4px', padding: '10px 16px', maxWidth: '75%', border: '1px solid #334155' },
-  bubbleText: { color: '#f1f5f9', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' },
-  timestamp: { color: '#475569', fontSize: 11, marginTop: 4, textAlign: 'right' },
-  typing: { display: 'flex', gap: 4, alignItems: 'center', height: 20 },
-  inputRow: { display: 'flex', gap: 10, marginTop: 12, alignItems: 'flex-end' },
-  textarea: { flex: 1, background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '10px 14px', color: '#f1f5f9', fontSize: 14, resize: 'none', outline: 'none', fontFamily: 'inherit' },
-  sendBtn: { background: '#f59e0b', color: '#0f172a', border: 'none', borderRadius: 10, width: 44, height: 44, fontSize: 18, cursor: 'pointer', fontWeight: 700, flexShrink: 0 },
-};

@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
-import api from '../api/client';
+import { motion } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/api/client';
+import Navbar from '@/components/Navbar';
+import { ShieldIcon, CheckIcon, DownloadIcon, TrashIcon, ListIcon, AlertIcon, LockIcon } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 interface ConsentStatus { consented: boolean; version: string | null; timestamp: string | null; }
 interface PrivacyInfo { user_rights: { article: string; right: string; endpoint: string }[]; data_categories: string[]; retention: string; administrator: string; contact: string; }
 
 export default function Privacy() {
+  const { logout } = useAuth();
   const [consent, setConsent] = useState<ConsentStatus | null>(null);
   const [info, setInfo] = useState<PrivacyInfo | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
@@ -36,129 +44,211 @@ export default function Privacy() {
     try {
       await api.delete('/gdpr/delete-account/', { data: { password: deletePassword } });
       localStorage.clear();
+      logout();
       window.location.href = '/';
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Błąd usuwania konta.');
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Błąd usuwania konta.');
     } finally { setLoading(false); }
   };
 
   return (
-    <div style={s.page}>
-      <h1 style={s.title}>🔒 Prywatność i RODO</h1>
-      <p style={s.sub}>Zarządzaj swoimi danymi osobowymi zgodnie z Rozporządzeniem UE 2016/679</p>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {msg && <div style={s.success}>{msg}</div>}
-      {error && <div style={s.errBox}>{error}</div>}
-
-      {/* Consent card */}
-      <div style={s.card}>
-        <h2 style={s.cardTitle}>✅ Status zgody RODO</h2>
-        {consent && (
-          <>
-            <div style={{ ...s.statusBadge, background: consent.consented ? '#052e16' : '#1c1917', borderColor: consent.consented ? '#16a34a' : '#78716c' }}>
-              <span style={{ color: consent.consented ? '#4ade80' : '#a8a29e' }}>
-                {consent.consented ? '● Zgoda aktywna' : '○ Zgoda cofnięta'}
-              </span>
-              {consent.version && <span style={s.badgeDetail}> · v{consent.version}</span>}
-              {consent.timestamp && <span style={s.badgeDetail}> · {new Date(consent.timestamp).toLocaleDateString('pl-PL')}</span>}
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-chart-3/10">
+              <ShieldIcon size={24} className="text-chart-3" />
             </div>
-            <p style={s.cardText}>
-              {consent.consented
-                ? 'Wyraziłeś zgodę na przetwarzanie danych osobowych w celu świadczenia usług aplikacji Silesia Akkka.'
-                : 'Twoja zgoda jest cofnięta. Część funkcji może być niedostępna.'}
-            </p>
-            <button onClick={toggleConsent} disabled={loading} style={consent.consented ? s.btnDanger : s.btnPrimary}>
-              {loading ? 'Zapisuję...' : consent.consented ? 'Cofnij zgodę' : 'Wyraź zgodę'}
-            </button>
-          </>
-        )}
-      </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Prywatność i RODO</h1>
+          </div>
+          <p className="text-muted-foreground">
+            Zarządzaj swoimi danymi osobowymi zgodnie z Rozporządzeniem UE 2016/679
+          </p>
+        </motion.div>
 
-      {/* Rights */}
-      {info && (
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>📋 Twoje prawa (RODO)</h2>
-          <div style={s.rightsGrid}>
-            {info.user_rights.map(r => (
-              <div key={r.article} style={s.rightCard}>
-                <div style={s.rightArticle}>{r.article}</div>
-                <div style={s.rightName}>{r.right}</div>
-                <code style={s.rightEndpoint}>{r.endpoint}</code>
+        {msg && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-chart-3/10 border border-chart-3/20 flex items-center gap-2"
+          >
+            <CheckIcon size={18} className="text-chart-3" />
+            <p className="text-sm text-chart-3">{msg}</p>
+          </motion.div>
+        )}
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2"
+          >
+            <AlertIcon size={18} className="text-destructive" />
+            <p className="text-sm text-destructive">{error}</p>
+          </motion.div>
+        )}
+
+        {/* Consent */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6">
+          <Card className="glass glass-border">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CheckIcon size={20} className="text-chart-3" />
+                <CardTitle>Status zgody RODO</CardTitle>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {consent && (
+                <>
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${
+                    consent.consented ? 'bg-chart-3/10 border-chart-3/30' : 'bg-muted border-border'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${consent.consented ? 'bg-chart-3' : 'bg-muted-foreground'}`} />
+                    <span className={consent.consented ? 'text-chart-3' : 'text-muted-foreground'}>
+                      {consent.consented ? 'Zgoda aktywna' : 'Zgoda cofnięta'}
+                    </span>
+                    {consent.version && <span className="text-muted-foreground text-sm"> · v{consent.version}</span>}
+                    {consent.timestamp && (
+                      <span className="text-muted-foreground text-sm"> · {new Date(consent.timestamp).toLocaleDateString('pl-PL')}</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {consent.consented
+                      ? 'Wyraziłeś zgodę na przetwarzanie danych osobowych w celu świadczenia usług aplikacji Silesia Akkka.'
+                      : 'Twoja zgoda jest cofnięta. Część funkcji może być niedostępna.'}
+                  </p>
+                  <Button onClick={toggleConsent} disabled={loading} variant={consent.consented ? 'destructive' : 'default'} className="gap-2">
+                    {loading ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      : consent.consented ? 'Cofnij zgodę' : 'Wyraź zgodę'}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-      {/* Export */}
-      <div style={s.card}>
-        <h2 style={s.cardTitle}>📥 Eksport danych (Art. 20 RODO)</h2>
-        <p style={s.cardText}>Pobierz wszystkie swoje dane w formacie JSON — historia energii, czaty, logi aktywności.</p>
-        <button onClick={exportData} style={s.btnPrimary}>⬇️ Pobierz moje dane</button>
-      </div>
-
-      {/* Data categories */}
-      {info && (
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>🗂️ Kategorie przetwarzanych danych</h2>
-          <ul style={s.list}>
-            {info.data_categories.map(c => <li key={c} style={s.listItem}>{c}</li>)}
-          </ul>
-          <p style={s.cardText}><strong style={{ color: '#94a3b8' }}>Administrator:</strong> {info.administrator} · {info.contact}</p>
-          <p style={s.cardText}><strong style={{ color: '#94a3b8' }}>Okres retencji:</strong> {info.retention}</p>
-        </div>
-      )}
-
-      {/* Delete account */}
-      <div style={{ ...s.card, borderColor: '#7f1d1d' }}>
-        <h2 style={{ ...s.cardTitle, color: '#ef4444' }}>⚠️ Usuń konto (Art. 17 RODO)</h2>
-        <p style={s.cardText}>Trwałe usunięcie konta i wszystkich powiązanych danych. Tej operacji nie można cofnąć.</p>
-        {!showDelete ? (
-          <button onClick={() => setShowDelete(true)} style={s.btnDanger}>Usuń moje konto</button>
-        ) : (
-          <div style={s.deleteBox}>
-            <p style={{ color: '#fca5a5', fontSize: 14 }}>Potwierdź usunięcie, podając swoje hasło:</p>
-            <input
-              type="password"
-              placeholder="Twoje hasło"
-              value={deletePassword}
-              onChange={e => setDeletePassword(e.target.value)}
-              style={s.input}
-            />
-            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-              <button onClick={deleteAccount} disabled={loading} style={s.btnDanger}>
-                {loading ? 'Usuwanie...' : '🗑️ Usuń bezpowrotnie'}
-              </button>
-              <button onClick={() => { setShowDelete(false); setDeletePassword(''); }} style={s.btnCancel}>Anuluj</button>
-            </div>
-          </div>
+        {/* Rights */}
+        {info && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mb-6">
+            <Card className="glass glass-border">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ListIcon size={20} className="text-accent" />
+                  <CardTitle>Twoje prawa (RODO)</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {info.user_rights.map(r => (
+                    <div key={r.article} className="p-4 rounded-lg bg-secondary border border-border">
+                      <p className="text-xs font-semibold text-primary mb-1">{r.article}</p>
+                      <p className="text-sm font-medium text-foreground mb-2">{r.right}</p>
+                      <code className="text-xs text-accent font-mono">{r.endpoint}</code>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
-      </div>
+
+        {/* Export */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mb-6">
+          <Card className="glass glass-border">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <DownloadIcon size={20} className="text-primary" />
+                <CardTitle>Eksport danych (Art. 20 RODO)</CardTitle>
+              </div>
+              <CardDescription>
+                Pobierz wszystkie swoje dane w formacie JSON — historia energii, czaty, logi aktywności.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={exportData} className="gap-2">
+                <DownloadIcon size={18} />
+                Pobierz moje dane
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Data Categories */}
+        {info && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mb-6">
+            <Card className="glass glass-border">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <LockIcon size={20} className="text-chart-4" />
+                  <CardTitle>Kategorie przetwarzanych danych</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ul className="space-y-2">
+                  {info.data_categories.map(c => (
+                    <li key={c} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-chart-4" />
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+                <div className="pt-4 border-t border-border space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Administrator:</span> {info.administrator} · {info.contact}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Okres retencji:</span> {info.retention}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Delete Account */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+          <Card className="glass border-destructive/30">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <AlertIcon size={20} className="text-destructive" />
+                <CardTitle className="text-destructive">Usuń konto (Art. 17 RODO)</CardTitle>
+              </div>
+              <CardDescription>
+                Trwałe usunięcie konta i wszystkich powiązanych danych. Tej operacji nie można cofnąć.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!showDelete ? (
+                <Button variant="destructive" onClick={() => setShowDelete(true)} className="gap-2">
+                  <TrashIcon size={18} />
+                  Usuń moje konto
+                </Button>
+              ) : (
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 space-y-4">
+                  <p className="text-sm text-destructive">Potwierdź usunięcie, podając swoje hasło:</p>
+                  <Input
+                    type="password"
+                    placeholder="Twoje hasło"
+                    value={deletePassword}
+                    onChange={e => setDeletePassword(e.target.value)}
+                    className="border-destructive/50 bg-background"
+                  />
+                  <div className="flex gap-3">
+                    <Button variant="destructive" onClick={deleteAccount} disabled={loading} className="gap-2">
+                      {loading
+                        ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        : <><TrashIcon size={16} /> Usuń bezpowrotnie</>
+                      }
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowDelete(false); setDeletePassword(''); }}>
+                      Anuluj
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </main>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 800, margin: '0 auto', padding: '32px 24px' },
-  title: { color: '#f1f5f9', fontSize: 28, fontWeight: 700, margin: 0 },
-  sub: { color: '#64748b', marginTop: 6, marginBottom: 24 },
-  success: { background: '#052e16', border: '1px solid #16a34a', color: '#4ade80', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14 },
-  errBox: { background: '#450a0a', border: '1px solid #dc2626', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14 },
-  card: { background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155' },
-  cardTitle: { color: '#f1f5f9', fontSize: 18, fontWeight: 600, margin: '0 0 12px 0' },
-  cardText: { color: '#94a3b8', fontSize: 14, lineHeight: 1.6, marginBottom: 14 },
-  statusBadge: { display: 'inline-flex', gap: 4, padding: '8px 14px', borderRadius: 20, border: '1px solid', marginBottom: 12, fontSize: 14 },
-  badgeDetail: { color: '#64748b' },
-  btnPrimary: { background: '#f59e0b', color: '#0f172a', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 600, cursor: 'pointer', fontSize: 14 },
-  btnDanger: { background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 600, cursor: 'pointer', fontSize: 14 },
-  btnCancel: { background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontSize: 14 },
-  rightsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
-  rightCard: { background: '#0f172a', borderRadius: 8, padding: '14px 16px', border: '1px solid #1e293b' },
-  rightArticle: { color: '#f59e0b', fontSize: 12, fontWeight: 700, marginBottom: 4 },
-  rightName: { color: '#f1f5f9', fontSize: 14, marginBottom: 6 },
-  rightEndpoint: { color: '#38bdf8', fontSize: 11, fontFamily: 'monospace' },
-  list: { paddingLeft: 20, marginBottom: 14 },
-  listItem: { color: '#94a3b8', fontSize: 14, marginBottom: 6 },
-  deleteBox: { background: '#450a0a', borderRadius: 8, padding: 16, border: '1px solid #7f1d1d' },
-  input: { background: '#0f172a', border: '1px solid #dc2626', borderRadius: 8, padding: '10px 12px', color: '#f1f5f9', fontSize: 14, width: '100%', boxSizing: 'border-box' },
-};
