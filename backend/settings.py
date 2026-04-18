@@ -82,14 +82,14 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ─── CORS ────────────────────────────────────────────────────────────────────
+# CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# ─── DRF + JWT ───────────────────────────────────────────────────────────────
+# DRF + JWT
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -116,14 +116,16 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# ─── Google Gemini (darmowy tier) ────────────────────────────────────────────
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+# Vertex AI (Gemini 2.5 Flash)
+VERTEX_PROJECT_ID = os.environ.get('VERTEX_PROJECT_ID', '')
+VERTEX_LOCATION = os.environ.get('VERTEX_LOCATION', 'us-central1')
 
-# ─── GDPR ────────────────────────────────────────────────────────────────────
+# GDPR
 GDPR_CONSENT_VERSION = '1.0'
 
-# ─── Encryption key (for sensitive fields) ───────────────────────────────────
+# Encryption key
 FIELD_ENCRYPTION_KEY = os.environ.get(
     'FIELD_ENCRYPTION_KEY',
     'dGhpcy1pcy1hLTMyLWJ5dGUta2V5LWZvci1kZXZlbG9wbWVudA=='
 )
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

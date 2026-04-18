@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\malyw\Desktop\Projekty\silesia_akkka\venv"
+VIRTUAL_ENV="C:\Users\malyw\Desktop\Projekty\hacktest\venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

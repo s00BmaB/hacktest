@@ -5,9 +5,8 @@ import pandas as pd
 from datetime import date, timedelta
 
 from django.conf import settings
-from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
-from rest_framework.parsers import MultiPartParser, JSONParser
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -35,18 +34,18 @@ def upload_csv(request):
         content = file.read().decode('utf-8')
         df = pd.read_csv(io.StringIO(content))
     except Exception as e:
-        return Response({'error': f'Błąd parsowania CSV: {e}'}, status=400)
+        return Response({'error': f'Blad parsowania CSV: {e}'}, status=400)
 
     df.columns = [c.strip().lower() for c in df.columns]
     if 'date' not in df.columns or 'kwh' not in df.columns:
-        return Response({'error': 'CSV musi zawierać kolumny: date, kwh (opcjonalnie: cost)'}, status=400)
+        return Response({'error': 'CSV musi zawierac kolumny: date, kwh (opcjonalnie: cost)'}, status=400)
 
     try:
         df['date'] = pd.to_datetime(df['date']).dt.date
         df['kwh'] = pd.to_numeric(df['kwh'], errors='coerce')
         df['cost'] = pd.to_numeric(df.get('cost', pd.Series(dtype=float)), errors='coerce') if 'cost' in df.columns else None
     except Exception as e:
-        return Response({'error': f'Błąd danych: {e}'}, status=400)
+        return Response({'error': f'Blad danych: {e}'}, status=400)
 
     df = df.dropna(subset=['date', 'kwh'])
     saved = 0
@@ -58,7 +57,7 @@ def upload_csv(request):
         )
         saved += 1
 
-    return Response({'saved': saved, 'message': f'Zapisano {saved} odczytów.'})
+    return Response({'saved': saved, 'message': f'Zapisano {saved} odczytow.'})
 
 
 @api_view(['GET'])
@@ -71,7 +70,7 @@ def get_readings(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def analyze(request):
-    """Analiza AI zużycia energii — Google Gemini 2.0 Flash (darmowy)."""
+    """Analiza AI zuzycia energii - Vertex AI Gemini 2.5 Flash."""
     readings = EnergyReading.objects.filter(user=request.user).order_by('date')
     if readings.count() < 3:
         return Response({'error': 'Potrzebujesz co najmniej 3 odczyty do analizy.'}, status=400)
@@ -93,51 +92,59 @@ def analyze(request):
 
     data_summary = (
         f"Okres: {dates[0]} do {dates[-1]}\n"
-        f"Liczba odczytów: {len(kwh_values)}\n"
-        f"Łączne zużycie: {total_kwh:.2f} kWh\n"
-        f"Średnie dzienne: {avg_kwh:.2f} kWh\n"
+        f"Liczba odczytow: {len(kwh_values)}\n"
+        f"Laczne zuzycie: {total_kwh:.2f} kWh\n"
+        f"Srednie dzienne: {avg_kwh:.2f} kWh\n"
         f"Maksimum: {max(kwh_values):.2f} kWh, minimum: {min(kwh_values):.2f} kWh\n"
-        f"Prognoza na koniec miesiąca: {predicted_kwh:.2f} kWh (~{predicted_cost:.2f} PLN)\n"
-        f"Ostatnie 10 odczytów: {list(zip([str(d) for d in dates[-10:]], kwh_values[-10:]))}"
+        f"Prognoza na koniec miesiaca: {predicted_kwh:.2f} kWh (~{predicted_cost:.2f} PLN)\n"
+        f"Ostatnie 10 odczytow: {list(zip([str(d) for d in dates[-10:]], kwh_values[-10:]))}"
     )
 
-    prompt = f"""Jesteś ekspertem ds. energetyki i doradcą klientów Tauron.
-Przeanalizuj dane zużycia energii elektrycznej klienta i podaj:
-1. Krótkie podsumowanie wzorca zużycia (2-3 zdania)
-2. 3-4 konkretne rekomendacje oszczędności energii
-3. Sugestię taryfy Tauron (G11 całodobowa, G12 dwustrefowa, G12w weekendowa)
-4. Ocenę czy zużycie jest typowe dla gospodarstwa domowego w Polsce
+    prompt = f"""Jestes ekspertem ds. energetyki i doradca klientow Tauron.
+Przeanalizuj dane zuzycia energii elektrycznej klienta.
 
 Dane klienta:
 {data_summary}
 
-Odpowiedz po polsku w formacie JSON:
-{{
-  "summary": "...",
-  "recommendations": ["...", "...", "..."],
-  "tariff_suggestion": "G11/G12/G12w",
-  "tariff_reason": "...",
-  "consumption_assessment": "niskie/typowe/wysokie"
-}}
-Zwróć TYLKO JSON, bez żadnego dodatkowego tekstu."""
+Odpowiedz TYLKO i WYLACZNIE poprawnym JSON bez zadnego dodatkowego tekstu, bez markdown, bez komentarzy:
+{{"summary":"krotkie podsumowanie 2-3 zdania","recommendations":["rekomendacja 1","rekomendacja 2","rekomendacja 3"],"tariff_suggestion":"G11","tariff_reason":"powod wyboru taryfy","consumption_assessment":"typowe"}}
+
+Wypelnij powyzszy JSON danymi po polsku. Zwroc TYLKO JSON."""
 
     try:
-        from google import genai
-        from google.genai import types as gtypes
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-            config=gtypes.GenerateContentConfig(max_output_tokens=1000, temperature=0.3),
+        import vertexai
+        from vertexai.generative_models import GenerativeModel, GenerationConfig
+
+        vertexai.init(
+            project=settings.VERTEX_PROJECT_ID,
+            location=settings.VERTEX_LOCATION,
         )
+
+        model = GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(
+            prompt,
+            generation_config=GenerationConfig(
+                max_output_tokens=2048,
+                temperature=0.1,
+                thinking_config={"thinking_budget": 0},
+            ),
+        )
+
         raw = response.text.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
+
+        # Wyodrebnij JSON
+        start = raw.find('{')
+        end = raw.rfind('}')
+        if start != -1 and end != -1:
+            raw = raw[start:end+1]
+
         result = json.loads(raw)
+
+    except json.JSONDecodeError as e:
+        # Fallback - zwroc odpowiedz tekstowa jesli JSON sie nie parsuje
+        return Response({'error': f'Blad parsowania JSON: {e} | Raw: {raw[:200]}'}, status=500)
     except Exception as e:
-        return Response({'error': f'Błąd AI: {e}'}, status=500)
+        return Response({'error': f'Blad AI: {e}'}, status=500)
 
     analysis = AIAnalysis.objects.create(
         user=request.user,
