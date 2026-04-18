@@ -36,7 +36,20 @@ export default function Privacy() {
     finally { setLoading(false); }
   };
 
-  const exportData = () => { window.open('http://127.0.0.1:8000/api/gdpr/export/', '_blank'); };
+  const exportData = async () => {
+    try {
+      const { data } = await api.get('/gdpr/export/');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'moje-dane.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Błąd eksportu danych.');
+    }
+  };
 
   const deleteAccount = async () => {
     if (!deletePassword) { setError('Podaj hasło.'); return; }

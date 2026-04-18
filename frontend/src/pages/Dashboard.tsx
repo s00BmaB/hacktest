@@ -27,6 +27,9 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [error, setError] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedFile, setSelectedFile] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (user) loadReadings(); }, [user]);
@@ -47,11 +50,12 @@ export default function Dashboard() {
     try {
       const { data } = await api.post('/energy/upload/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       setUploadMsg(data.message);
+      setAnalysis(null);
       await loadReadings();
     } catch (e: unknown) {
       const axiosError = e as { response?: { data?: { error?: string } } };
       setError(axiosError.response?.data?.error || 'Błąd uploadu.');
-    } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+    } finally { setUploading(false); }
   };
 
   const handleAnalyze = async () => {
@@ -67,6 +71,12 @@ export default function Dashboard() {
 
   const assessmentColor = (a: string) =>
     ({ niskie: 'text-chart-3', typowe: 'text-primary', wysokie: 'text-destructive' }[a] ?? 'text-muted-foreground');
+
+  const filteredReadings = readings.filter(r => {
+    if (dateFrom && r.date < dateFrom) return false;
+    if (dateTo && r.date > dateTo) return false;
+    return true;
+  });
 
   const totalKwh = readings.reduce((s, r) => s + r.kwh, 0);
   const avgKwh = readings.length ? totalKwh / readings.length : 0;
@@ -135,12 +145,19 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-col sm:flex-row gap-4">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".csv"
-                  className="flex-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 text-sm text-muted-foreground bg-input border border-border rounded-lg px-4 py-2"
-                />
+                <label className="flex-1 flex items-center gap-3 bg-input border border-border rounded-lg px-4 py-2 cursor-pointer hover:border-primary/50 transition-colors">
+                  <span className="py-1 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium whitespace-nowrap">Wybierz plik</span>
+                  <span className="text-sm text-muted-foreground truncate">
+                    {selectedFile || 'Nie wybrano pliku'}
+                  </span>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={e => setSelectedFile(e.target.files?.[0]?.name || '')}
+                  />
+                </label>
                 <Button onClick={handleUpload} disabled={uploading} className="gap-2">
                   {uploading ? (
                     <>
@@ -181,15 +198,45 @@ export default function Dashboard() {
           >
             <Card className="glass glass-border lg:col-span-2">
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <ChartIcon size={20} className="text-primary" />
-                  <CardTitle>Zużycie dzienne (kWh)</CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <ChartIcon size={20} className="text-primary" />
+                    <CardTitle>Zużycie dzienne (kWh)</CardTitle>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      className="text-xs bg-input border border-border rounded-md px-2 py-1.5 text-foreground"
+                    />
+                    <span className="text-xs text-muted-foreground">—</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      className="text-xs bg-input border border-border rounded-md px-2 py-1.5 text-foreground"
+                    />
+                    {(dateFrom || dateTo) && (
+                      <button
+                        onClick={() => { setDateFrom(''); setDateTo(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground px-1"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {(dateFrom || dateTo) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {filteredReadings.length} odczytów w wybranym okresie
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={readings}>
+                    <AreaChart data={filteredReadings}>
                       <defs>
                         <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="oklch(0.75 0.18 55)" stopOpacity={0.3}/>

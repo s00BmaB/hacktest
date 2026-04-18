@@ -48,12 +48,13 @@ def upload_csv(request):
         return Response({'error': f'Blad danych: {e}'}, status=400)
 
     df = df.dropna(subset=['date', 'kwh'])
+    EnergyReading.objects.filter(user=request.user).delete()
     saved = 0
     for _, row in df.iterrows():
         cost_val = row.get('cost') if 'cost' in df.columns and pd.notna(row.get('cost')) else None
-        EnergyReading.objects.update_or_create(
+        EnergyReading.objects.create(
             user=request.user, date=row['date'],
-            defaults={'kwh': row['kwh'], 'cost': cost_val}
+            kwh=row['kwh'], cost=cost_val
         )
         saved += 1
 
@@ -101,15 +102,23 @@ def analyze(request):
     )
 
     prompt = f"""Jestes ekspertem ds. energetyki i doradca klientow Tauron.
-Przeanalizuj dane zuzycia energii elektrycznej klienta.
+Przeanalizuj dane zuzycia energii elektrycznej klienta i dobierz optymalną taryfę.
+
+Dostępne taryfy Tauron:
+- G11: jednolita cena przez całą dobę (~0.80 PLN/kWh). Optymalna gdy zuzycie jest rowne przez cały dzień.
+- G12: dwie strefy — dzienna drozsza (~0.95 PLN/kWh, 6:00-22:00) i nocna tansza (~0.55 PLN/kWh, 22:00-6:00). Optymalna gdy wiekszosc zuzycia wypada w nocy (>40% nocą).
+- G12W: jak G12 ale weekendy i swieta calodobe w strefie nocnej (taniej). Optymalna dla osob zuzywajecych duzo pradu w weekendy.
+- G13: trzy strefy — szczytowa bardzo droga (rano i wieczor w dni robocze), pozaszczytowa srednia, nocna tania. Optymalna dla klientow biznesowych lub bardzo wysokiego zuzycia z mozliwoscia przesuwania poboru poza szczyt.
 
 Dane klienta:
 {data_summary}
 
-Odpowiedz TYLKO i WYLACZNIE poprawnym JSON bez zadnego dodatkowego tekstu, bez markdown, bez komentarzy:
-{{"summary":"krotkie podsumowanie 2-3 zdania","recommendations":["rekomendacja 1","rekomendacja 2","rekomendacja 3"],"tariff_suggestion":"G11","tariff_reason":"powod wyboru taryfy","consumption_assessment":"typowe"}}
+Na podstawie profilu zuzycia (rozklad godzinowy jesli dostepny, ilosc, regularnosc) wybierz JEDNA najlepsza taryfę.
 
-Wypelnij powyzszy JSON danymi po polsku. Zwroc TYLKO JSON."""
+Odpowiedz TYLKO i WYLACZNIE poprawnym JSON bez zadnego dodatkowego tekstu, bez markdown, bez komentarzy:
+{{"summary":"podsumowanie 2-3 zdania","recommendations":["rekomendacja 1","rekomendacja 2","rekomendacja 3"],"tariff_suggestion":"NAZWA_TARYFY","tariff_reason":"konkretne uzasadnienie dlaczego ta taryfa","consumption_assessment":"niskie|typowe|wysokie"}}
+
+Wypelnij powyzszy JSON danymi po polsku. W polu tariff_suggestion wpisz dokladnie jedna z: G11, G12, G12W, G13. Zwroc TYLKO JSON."""
 
     try:
         import vertexai
@@ -124,7 +133,7 @@ Wypelnij powyzszy JSON danymi po polsku. Zwroc TYLKO JSON."""
         response = model.generate_content(
             prompt,
             generation_config=GenerationConfig(
-                max_output_tokens=2048,
+                max_output_tokens=8192,
                 temperature=0.1,
             ),
         )
@@ -138,6 +147,21 @@ Wypelnij powyzszy JSON danymi po polsku. Zwroc TYLKO JSON."""
             raw = raw[start:end+1]
 
         result = json.loads(raw)
+
+        import re
+        def strip_markdown(text):
+            if not isinstance(text, str):
+                return text
+            text = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', text)
+            text = re.sub(r'_{1,2}(.*?)_{1,2}', r'\1', text)
+            text = re.sub(r'`{1,3}(.*?)`{1,3}', r'\1', text)
+            return text.strip()
+
+        for key in ('summary', 'tariff_reason', 'consumption_assessment'):
+            if key in result:
+                result[key] = strip_markdown(result[key])
+        if 'recommendations' in result:
+            result['recommendations'] = [strip_markdown(r) for r in result['recommendations']]
 
     except json.JSONDecodeError as e:
         # Fallback - zwroc odpowiedz tekstowa jesli JSON sie nie parsuje
