@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+      build: ./backend
+      env_file:
+      - .env
+      volumes:
+        - ./backend:/app
+        - ./apps:/app/apps  # Montujemy folder apps do środka kontenera backendu
+      environment:
+        - PYTHONPATH=/app
+      ports:
+        - "8000:8000"
+      command: >
+        sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app
+      # Ignorujemy lokalny folder node_modules na rzecz tego w kontenerze
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+
+  proxy:
+    image: nginx:alpine
+    # Montujemy nasz własny plik konfiguracyjny do Nginxa
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    # Nginx nasłuchuje w kontenerze na 80, my wystawiamy to na Windows/Linuksie jako 8080
+    ports:
+      - "8080:80"
+    # Upewniamy się, że Nginx wstanie dopiero, gdy serwery będą gotowe
+    depends_on:
+      - backend
+      - frontend
